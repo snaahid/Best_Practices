@@ -1,0 +1,183 @@
+Exercise 1: Single Responsibility Principle (SRP)
+Objective: Ensure that each SQL function or procedure has one responsibility, focusing on keeping queries and stored procedures narrow in their scope.
+
+Task:
+
+Create a table schema for Products and Orders.
+Write SQL queries for adding a new product and creating a new order.
+Solution:
+Schema Design:
+sql
+Copy code
+-- Products Table
+CREATE TABLE Products (
+    ProductID INT PRIMARY KEY,
+    ProductName VARCHAR(255) NOT NULL,
+    Price DECIMAL(10, 2) NOT NULL,
+    StockQuantity INT NOT NULL
+);
+
+-- Orders Table
+CREATE TABLE Orders (
+    OrderID INT PRIMARY KEY,
+    UserID INT NOT NULL,
+    OrderDate DATETIME DEFAULT CURRENT_TIMESTAMP,
+    TotalAmount DECIMAL(10, 2) NOT NULL
+);
+
+-- OrderItems Table (to relate products to orders)
+CREATE TABLE OrderItems (
+    OrderItemID INT PRIMARY KEY,
+    OrderID INT,
+    ProductID INT,
+    Quantity INT NOT NULL,
+    Price DECIMAL(10, 2),
+    FOREIGN KEY (OrderID) REFERENCES Orders(OrderID),
+    FOREIGN KEY (ProductID) REFERENCES Products(ProductID)
+);
+SQL Queries:
+sql
+Copy code
+-- Add a new product (Single Responsibility)
+INSERT INTO Products (ProductID, ProductName, Price, StockQuantity)
+VALUES (1, 'Laptop', 1200.00, 50);
+
+-- Create a new order (Single Responsibility)
+INSERT INTO Orders (OrderID, UserID, TotalAmount)
+VALUES (101, 1, 2400.00);
+
+-- Add order items to the order
+INSERT INTO OrderItems (OrderItemID, OrderID, ProductID, Quantity, Price)
+VALUES (1, 101, 1, 2, 1200.00);
+Exercise 2: Open/Closed Principle (OCP)
+Objective: Ensure that the database schema or SQL queries are designed in a way that allows for extension without modifying existing code.
+
+Task:
+
+Write a SQL query to calculate the total order amount, with the option to include discounts.
+Show how the system can be extended to include new discount types without changing the existing logic.
+Solution:
+Schema Design for Discounts:
+sql
+Copy code
+-- Add a Discounts Table to allow for extensibility
+CREATE TABLE Discounts (
+    DiscountID INT PRIMARY KEY,
+    DiscountName VARCHAR(255),
+    DiscountAmount DECIMAL(10, 2),
+    IsPercentage BIT
+);
+SQL Query for Total Amount Calculation (Extended for Discounts):
+sql
+Copy code
+-- Calculate Total Amount with Discount
+-- The query is open for extension if new discount types are added
+
+SELECT 
+    o.OrderID,
+    o.TotalAmount - 
+        (CASE
+            WHEN d.IsPercentage = 1 THEN o.TotalAmount * (d.DiscountAmount / 100)
+            ELSE d.DiscountAmount
+        END) AS FinalAmount
+FROM Orders o
+LEFT JOIN Discounts d ON o.OrderID = d.DiscountID
+WHERE o.OrderID = 101;
+This allows new discount types to be added (e.g., percentage or fixed amount) without modifying the original order calculation logic.
+
+Exercise 3: Liskov Substitution Principle (LSP)
+Objective: Ensure that you can use a derived class (or extended functionality) without breaking the system.
+
+Task:
+
+Introduce a SpecialOrders table for VIP customers that apply different discount logic.
+Write a SQL query that works for both standard and special orders.
+Solution:
+Schema Design for Special Orders:
+sql
+Copy code
+-- SpecialOrders table for VIP customers
+CREATE TABLE SpecialOrders (
+    SpecialOrderID INT PRIMARY KEY,
+    OrderID INT,
+    DiscountID INT,
+    VIPCustomerID INT,
+    FOREIGN KEY (OrderID) REFERENCES Orders(OrderID),
+    FOREIGN KEY (DiscountID) REFERENCES Discounts(DiscountID)
+);
+SQL Query for Handling Special and Standard Orders (Liskov Substitution):
+sql
+Copy code
+-- Calculate final amount for both standard and special orders
+
+SELECT 
+    o.OrderID,
+    COALESCE(so.SpecialOrderID, 0) AS SpecialOrderID, -- If no special order, return 0
+    o.TotalAmount - 
+        (CASE
+            WHEN so.SpecialOrderID > 0 THEN 
+                (SELECT DiscountAmount FROM Discounts WHERE DiscountID = so.DiscountID)
+            ELSE 0
+        END) AS FinalAmount
+FROM Orders o
+LEFT JOIN SpecialOrders so ON o.OrderID = so.OrderID
+WHERE o.OrderID = 101;
+The COALESCE function ensures that we substitute the standard order logic if there is no special order.
+
+Exercise 4: Interface Segregation Principle (ISP)
+Objective: Avoid creating large, complex queries that handle too many responsibilities. Break complex queries into simpler ones.
+
+Task:
+
+Create separate SQL views or functions for calculating order details and calculating product totals.
+Solution:
+Schema Design for Views:
+sql
+Copy code
+-- View for Order Details
+CREATE VIEW OrderDetails AS
+SELECT o.OrderID, o.OrderDate, o.TotalAmount
+FROM Orders o;
+
+-- View for Product Totals (Break down by product)
+CREATE VIEW ProductTotals AS
+SELECT oi.OrderID, oi.ProductID, SUM(oi.Quantity) AS TotalQuantity, SUM(oi.Price * oi.Quantity) AS TotalPrice
+FROM OrderItems oi
+GROUP BY oi.OrderID, oi.ProductID;
+SQL Query Using Views:
+sql
+Copy code
+-- Calculate Order Details and Product Totals
+SELECT od.OrderID, od.OrderDate, pt.ProductID, pt.TotalQuantity, pt.TotalPrice
+FROM OrderDetails od
+JOIN ProductTotals pt ON od.OrderID = pt.OrderID
+WHERE od.OrderID = 101;
+This allows us to modify and extend OrderDetails and ProductTotals independently, following the ISP.
+
+Exercise 5: Dependency Inversion Principle (DIP)
+Objective: Ensure that high-level SQL procedures do not depend directly on low-level details, such as specific table structures.
+
+Task:
+
+Write a stored procedure for order processing that depends on abstracted views or functions, rather than directly manipulating tables.
+Solution:
+Stored Procedure for Order Processing (Using Views):
+sql
+Copy code
+CREATE PROCEDURE ProcessOrder (IN orderId INT)
+BEGIN
+    DECLARE totalAmount DECIMAL(10, 2);
+
+    -- Get the total amount using the OrderDetails view
+    SELECT TotalAmount INTO totalAmount
+    FROM OrderDetails
+    WHERE OrderID = orderId;
+
+    -- Process the payment (this is a simplified version)
+    INSERT INTO Payments (OrderID, Amount) 
+    VALUES (orderId, totalAmount);
+
+    -- More order processing logic goes here...
+END;
+In this solution, the stored procedure depends on an abstracted view (OrderDetails) rather than directly querying the Orders table.
+
